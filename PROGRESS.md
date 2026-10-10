@@ -9,7 +9,7 @@
 | 3 | Neural brains, vision rays, spatial hash | done |
 | 4 | Reproduction, mutation, headless script, tuning | done |
 | 5 | Diet, predation, combat, coexistence tuning | done |
-| 6 | Inspector, NN diagram, charts, event log | pending |
+| 6 | Inspector, NN diagram, charts, event log | done |
 | 7 | Save/load, speed controls, README, cleanup | pending |
 
 ## Log
@@ -108,3 +108,15 @@ Final defaults, per seed (50,000 ticks):
 The immigration safety net (`immigrationFloor`) stayed **disabled (0)** in every run, so no
 outside creatures were added. Known weak spot: seed 4 swings down to 29 creatures, so on some
 seeds beyond 50k ticks an extinction is possible; predator–prey cycles are real dynamics.
+
+### Milestone 6
+- Added `src/ui/inspector.ts` (click-to-inspect panel + live network diagram), `src/ui/charts.ts`
+  (plain-canvas line/stacked charts: population, herbivore/carnivore share, mean traits, max
+  generation), the event log panel and the full control panel in `src/main.ts`.
+- Added `scripts/e2e.ts` (Playwright via `playwright-core` + the pre-installed Chromium; no browser
+  download). First run: `E2E FAILED` — a 404 for `/favicon.ico` logged a console error, and the
+  creature the script clicked had died before the check. Fixes: inline SVG favicon; the script now
+  clicks the most energetic creature. Second run: `E2E PASSED` (tick 4,712, population 425 =
+  277 herbivores / 154 carnivores, 270 distinct canvas colours).
+- Polish after looking at the screenshot: trait-chart legend overlapped the title (legend now moves
+  to its own row when needed), network output labels were clipped, small grazers were hard to see.

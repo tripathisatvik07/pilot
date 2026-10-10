@@ -66,7 +66,7 @@ export class Renderer {
   }
 
   private drawHeatmap(world: World): void {
-    const { food, fertility } = world.food;
+    const { food, fertility, meat } = world.food;
     const data = this.heatImage.data;
     const max = world.cfg.foodMax;
     for (let i = 0; i < food.length; i++) {
@@ -74,9 +74,11 @@ export class Renderer {
       const f = fertility[i];
       // Dark soil tinted by fertility, green by current plant energy.
       const o = i * 4;
-      data[o] = 18 + 22 * f;
-      data[o + 1] = 16 + 14 * f + 150 * t;
-      data[o + 2] = 14 + 40 * t;
+      // Carrion shows as a reddish stain on top.
+      const m = Math.min(1, meat[i] / max);
+      data[o] = 16 + 30 * f + 120 * m;
+      data[o + 1] = 14 + 22 * f + 190 * t;
+      data[o + 2] = 12 + 50 * t;
       data[o + 3] = 255;
     }
     this.heatCtx.putImageData(this.heatImage, 0, 0);
@@ -108,7 +110,8 @@ export class Renderer {
       ctx.fillStyle = this.styles[b];
       ctx.beginPath();
       for (const s of list) {
-        const size = p.size[s] * r;
+        // Drawn a bit larger than the physical body (plus a minimum) so small grazers stay visible.
+        const size = p.size[s] * r * 1.2 + 1;
         const h = p.heading[s];
         const c = Math.cos(h);
         const sn = Math.sin(h);

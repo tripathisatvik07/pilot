@@ -79,3 +79,15 @@
   hunting is — too high and predators overshoot and crash), `carrionFraction`/`carrionDecay`
   (buffer strength), `plantDietExponent`/`meatDietExponent` (generalist vs. specialist),
   `huntSatiation` (predators stop hunting when full; off by default).
+
+## Milestone 6 — seeing inside: inspector, brain diagram, charts, event log
+- **Inspector:** click near a creature; it is tracked by *id* (slots get reused after death, ids never
+  are), so the panel says so when it dies instead of silently jumping to a newborn.
+- **Brain diagram:** inputs (left, labelled) → 10 hidden → 4 outputs. Node colour = last tick's
+  activation (green +, red −); edges = weights (green +, red −, thicker = stronger; weak ones hidden).
+- **Charts:** drawn with plain Canvas 2D from the samples the simulation records every
+  `statsInterval` ticks. Traits are normalised to their ranges so all seven fit on one axis.
+- **Event log:** first carnivore born, population crash (`crashFraction` drop within `crashWindow`
+  samples), new dominant lineage (≥ `dominantLineageShare`), extinctions.
+- **Why panels update at ~5 Hz:** DOM and chart redraws are slow compared with the world canvas;
+  humans can't read faster anyway.
