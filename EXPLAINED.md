@@ -15,3 +15,18 @@
 - **Tweak:** `foodMax` and `foodGrowthRate` (how rich the world is → population size),
   `seasonAmplitude`/`seasonPeriod` (boom-bust strength and length), `fertilityMin`,
   `fertilityNoiseScale`, `fertilityContrast` (how patchy the land is).
+
+## Milestone 2 — creatures and the energy economy
+- **What was added:** a creature pool stored as *structure of arrays* (one typed array per field,
+  e.g. all x positions together), a genome (`Float32Array`: brain weights then 7 body-trait genes
+  in 0..1) and the per-tick energy budget. A placeholder random-walk "brain" drives them for now.
+- **Why SoA:** thousands of creatures every tick; typed arrays are compact, fast to loop over,
+  create no garbage, and save/load becomes array copies. Dead slots go on a LIFO free list so
+  slot assignment is deterministic.
+- **Energy per tick:** `− basal − movement + food`. Basal = `basalCost × size × metabolism ×
+  (1 + brain/vision/speed-trait surcharges)`; movement = `moveCostCoef × size × speed²`.
+  Grazing takes up to `biteSize × size × metabolism × (1 − diet)²` from the cell underfoot.
+- **Death:** energy ≤ 0 or age > `maxAge`. The carcass (`bodyEnergy × size` + leftover energy)
+  is partly (`corpseDropFraction`) returned to the soil, so death fertilises the land.
+- **Tweak:** `basalCost`, `moveCostCoef` (how expensive living/moving is), `biteSize` (how fast
+  food converts to energy), `energyPerSize` (reserve size), `maxAge`, `bodyEnergy`.

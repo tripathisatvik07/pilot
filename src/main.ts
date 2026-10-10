@@ -15,7 +15,7 @@ window.addEventListener('resize', () => renderer.resize(world));
 function frame(): void {
   if (running) world.step();
   renderer.draw(world, { showHeatmap: true, showRays: false, selectedSlot: -1 });
-  hud.textContent = `tick ${world.tick}`;
+  hud.textContent = `tick ${world.tick} · population ${world.population}`;
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

@@ -1,5 +1,6 @@
 // Canvas 2D renderer. It only reads World state; it never mutates it.
 
+import { VISION_RAYS } from '../sim/config.ts';
 import type { World } from '../sim/world.ts';
 
 export interface RenderOptions {
@@ -84,6 +85,111 @@ export class Renderer {
     this.ctx.drawImage(this.heatCanvas, 0, 0, this.canvas.width, this.canvas.height);
   }
 
-  // Creatures are added in milestone 2.
-  private drawCreatures(_world: World, _opts: RenderOptions): void {}
+  private drawCreatures(world: World, opts: RenderOptions): void {
+    const ctx = this.ctx;
+    const p = world.pool;
+    const r = world.cfg.bodyRadius;
+
+    if (opts.showRays) this.drawAllRays(world);
+
+    // Bucket creatures by quantised colour so we issue ~40 fills instead of one per
+    // creature: changing fillStyle and filling is the expensive part of Canvas 2D.
+    const buckets: number[][] = this.buckets;
+    for (const b of buckets) b.length = 0;
+    for (let s = 0; s < p.capacity; s++) {
+      if (!p.alive[s]) continue;
+      const d = Math.min(DIET_STEPS - 1, Math.floor(p.diet[s] * DIET_STEPS));
+      const e = Math.max(0, Math.min(ENERGY_STEPS - 1, Math.floor((p.energy[s] / p.maxEnergy[s]) * ENERGY_STEPS)));
+      buckets[d * ENERGY_STEPS + e].push(s);
+    }
+    for (let b = 0; b < buckets.length; b++) {
+      const list = buckets[b];
+      if (list.length === 0) continue;
+      ctx.fillStyle = this.styles[b];
+      ctx.beginPath();
+      for (const s of list) {
+        const size = p.size[s] * r;
+        const h = p.heading[s];
+        const c = Math.cos(h);
+        const sn = Math.sin(h);
+        const x = p.x[s];
+        const y = p.y[s];
+        // Long nose along the heading, two short rear corners: direction reads at a glance.
+        ctx.moveTo(x + c * size * 1.6, y + sn * size * 1.6);
+        ctx.lineTo(x - c * size + sn * size * 0.9, y - sn * size - c * size * 0.9);
+        ctx.lineTo(x - c * size - sn * size * 0.9, y - sn * size + c * size * 0.9);
+        ctx.closePath();
+      }
+      ctx.fill();
+    }
+
+    const sel = opts.selectedSlot;
+    if (sel >= 0 && p.alive[sel]) {
+      this.drawRays(world, sel, 'rgba(255,255,255,0.7)');
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1.5 / this.scale;
+      ctx.beginPath();
+      ctx.arc(p.x[sel], p.y[sel], p.size[sel] * r * 2.5, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+
+  private drawAllRays(world: World): void {
+    const ctx = this.ctx;
+    const p = world.pool;
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.lineWidth = 1 / this.scale;
+    ctx.beginPath();
+    for (let s = 0; s < p.capacity; s++) if (p.alive[s]) this.rayPath(world, s);
+    ctx.stroke();
+  }
+
+  private drawRays(world: World, s: number, style: string): void {
+    const ctx = this.ctx;
+    ctx.strokeStyle = style;
+    ctx.lineWidth = 1 / this.scale;
+    ctx.beginPath();
+    this.rayPath(world, s);
+    ctx.stroke();
+  }
+
+  /** Add the creature's vision rays (evenly spread across its FOV) to the current path. */
+  private rayPath(world: World, s: number): void {
+    const p = world.pool;
+    const ctx = this.ctx;
+    const n = VISION_RAYS;
+    const fov = p.fov[s];
+    const range = p.visionRange[s];
+    for (let k = 0; k < n; k++) {
+      const a = p.heading[s] - fov / 2 + (fov * (k + 0.5)) / n;
+      ctx.moveTo(p.x[s], p.y[s]);
+      ctx.lineTo(p.x[s] + Math.cos(a) * range, p.y[s] + Math.sin(a) * range);
+    }
+  }
+
+  private readonly buckets: number[][] = Array.from({ length: DIET_STEPS * ENERGY_STEPS }, () => []);
+  private readonly styles: string[] = buildStyles();
+}
+
+const DIET_STEPS = 10;
+const ENERGY_STEPS = 4;
+
+/** Hue runs green (herbivore) → red (carnivore); lightness rises with stored energy. */
+function buildStyles(): string[] {
+  const out: string[] = [];
+  for (let d = 0; d < DIET_STEPS; d++) {
+    for (let e = 0; e < ENERGY_STEPS; e++) {
+      const hue = 120 * (1 - (d + 0.5) / DIET_STEPS);
+      const light = 30 + 40 * ((e + 0.5) / ENERGY_STEPS);
+      out.push(`hsl(${hue.toFixed(0)}, 85%, ${light.toFixed(0)}%)`);
+    }
+  }
+  return out;
+}
+
+/** Colour for one creature (used by the inspector to match the map). */
+export function creatureColor(diet: number, energyFrac: number): string {
+  const hue = 120 * (1 - diet);
+  const light = 30 + 40 * Math.max(0, Math.min(1, energyFrac));
+  return `hsl(${hue.toFixed(0)}, 85%, ${light.toFixed(0)}%)`;
 }
