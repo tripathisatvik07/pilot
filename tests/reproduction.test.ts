@@ -4,7 +4,7 @@ import { B2_OFFSET, BRAIN_GENES, GENOME_LENGTH, mutateInto, TRAIT_OFFSET } from 
 import { runHeadless } from '../src/sim/headless.ts';
 import { Rng } from '../src/sim/rng.ts';
 import { OUT_REPRO } from '../src/sim/world.ts';
-import { emptyWorld, makeGenome } from './helpers.ts';
+import { emptyWorld, makeGenome, SMALL_WORLD } from './helpers.ts';
 
 /** A genome whose brain always wants to reproduce (and does nothing else). */
 function breeder(): Float32Array {
@@ -129,8 +129,8 @@ describe('headless run', () => {
   });
 
   it('is deterministic: two headless runs give identical samples', () => {
-    const a = runHeadless({ ticks: 1500, config: { seed: 3 } });
-    const b = runHeadless({ ticks: 1500, config: { seed: 3 } });
+    const a = runHeadless({ ticks: 1500, config: { ...SMALL_WORLD, seed: 3 } });
+    const b = runHeadless({ ticks: 1500, config: { ...SMALL_WORLD, seed: 3 } });
     expect(JSON.stringify(a.world.stats.samples)).toBe(JSON.stringify(b.world.stats.samples));
   });
 });

@@ -7,5 +7,7 @@ export default defineConfig({
     include: ['tests/**/*.test.ts'],
     // The headless/tuning tests run thousands of ticks; give them room on slow machines.
     testTimeout: 120_000,
+    // Separate processes: the long CPU-bound simulation tests can't starve each other's RPC.
+    pool: 'forks',
   },
 });

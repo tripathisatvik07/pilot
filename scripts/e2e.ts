@@ -101,6 +101,34 @@ try {
   if (!(info.tick > 0)) fail('simulation did not advance');
   if (info.colours < 10 || info.nonBlack < 100) fail('canvas looks blank');
   if (!info.inspector.includes('generation')) fail('inspector did not show the clicked creature');
+
+  // Performance check: a dense world held at ~2,200 creatures (pool cap) at 1× speed.
+  await page.evaluate(() => {
+    const t = (window as any).terrarium;
+    t.setWorld(new t.World({ seed: 7, initialPopulation: 2200, maxCreatures: 2200, foodMax: 80, foodGrowthRate: 0.03 }));
+    t.setSpeed(1);
+    t.setRunning(true);
+  });
+  await page.waitForTimeout(3000); // let the JIT and frame timing settle
+  const samples: { fps: number; pop: number; ms: number; draw: number }[] = [];
+  for (let i = 0; i < 5; i++) {
+    await page.waitForTimeout(1000);
+    samples.push(
+      await page.evaluate(() => {
+        const t = (window as any).terrarium;
+        return { fps: t.fps, pop: t.world.population, ms: t.msPerTick, draw: t.drawMs };
+      }),
+    );
+  }
+  const meanFps = samples.reduce((a, b) => a + b.fps, 0) / samples.length;
+  const meanPop = samples.reduce((a, b) => a + b.pop, 0) / samples.length;
+  const meanMs = samples.reduce((a, b) => a + b.ms, 0) / samples.length;
+  const meanDraw = samples.reduce((a, b) => a + b.draw, 0) / samples.length;
+  console.log(
+    `dense perf: mean population ${meanPop.toFixed(0)}, ${meanFps.toFixed(1)} fps, ` +
+      `${meanMs.toFixed(1)} ms per sim tick, ${meanDraw.toFixed(1)} ms per draw`,
+  );
+  await page.screenshot({ path: 'docs/screenshot-dense.png' });
   await browser.close();
 } catch (e) {
   fail(String(e));

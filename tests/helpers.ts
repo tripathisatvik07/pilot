@@ -20,3 +20,12 @@ export function makeGenome(traits: Partial<Record<keyof typeof TRAIT_INDEX, numb
   }
   return g;
 }
+
+/** A quarter-size world: same rules, ~4× cheaper per tick. For tests that only need "a living world". */
+export const SMALL_WORLD: Partial<SimConfig> = {
+  worldWidth: 600,
+  worldHeight: 400,
+  foodCols: 30,
+  foodRows: 20,
+  initialPopulation: 100,
+};

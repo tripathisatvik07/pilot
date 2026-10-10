@@ -206,6 +206,12 @@ let lastPanel = 0;
 let fpsFrames = 0;
 let fpsT0 = performance.now();
 let fps = 0;
+/** Mean ms spent in world.step() per tick over the last second (shown in the HUD). */
+let msPerTick = 0;
+let stepMs = 0;
+/** Mean ms per frame spent drawing the world canvas. */
+let drawMs = 0;
+let drawMsAcc = 0;
 let ticksThisSecond = 0;
 let tps = 0;
 
@@ -217,13 +223,20 @@ function frame(now: number): void {
       ticksThisSecond++;
       if (performance.now() - t0 > FRAME_BUDGET_MS) break;
     }
+    stepMs += performance.now() - t0;
   }
+  const d0 = performance.now();
   renderer.draw(world, { showHeatmap, showRays, selectedSlot: inspector.selectedSlot });
+  drawMsAcc += performance.now() - d0;
 
   fpsFrames++;
   if (now - fpsT0 >= 1000) {
     fps = (fpsFrames * 1000) / (now - fpsT0);
     tps = (ticksThisSecond * 1000) / (now - fpsT0);
+    msPerTick = ticksThisSecond > 0 ? stepMs / ticksThisSecond : 0;
+    drawMs = drawMsAcc / fpsFrames;
+    drawMsAcc = 0;
+    stepMs = 0;
     fpsFrames = 0;
     ticksThisSecond = 0;
     fpsT0 = now;
@@ -233,7 +246,7 @@ function frame(now: number): void {
   hud.textContent =
     `tick ${world.tick} · pop ${world.population}` +
     (latest ? ` (herb ${latest.herbivores} / carn ${latest.carnivores}) · max gen ${latest.maxGeneration}` : '') +
-    ` · ${season} · ${fps.toFixed(0)} fps · ${tps.toFixed(0)} ticks/s`;
+    ` · ${season} · ${fps.toFixed(0)} fps · ${tps.toFixed(0)} ticks/s · ${msPerTick.toFixed(1)} ms/tick · draw ${drawMs.toFixed(1)} ms`;
 
   // Panels are comparatively expensive DOM/canvas work; ~5 Hz is plenty for humans.
   if (now - lastPanel > 200) {
@@ -250,8 +263,18 @@ requestAnimationFrame(frame);
   get world() {
     return world;
   },
+  World,
   setWorld,
   setRunning,
+  get fps() {
+    return fps;
+  },
+  get drawMs() {
+    return drawMs;
+  },
+  get msPerTick() {
+    return msPerTick;
+  },
   setSpeed(v: number) {
     speedInput.value = String(v);
     speedInput.dispatchEvent(new Event('input'));

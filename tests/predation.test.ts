@@ -101,6 +101,7 @@ describe('carrion', () => {
     w.step(); // nobody around: only decay
     expect(w.food.meat[ci]).toBeCloseTo(left * 0.99, 3);
 
+    w.food.food.fill(0); // the corpse also fertilised the plants; remove them to isolate carrion
     const herb = w.addCreature(hunter(0), 400, 400, 20);
     const carn = w.addCreature(hunter(1), 400, 400, 20);
     const before = w.food.meat[ci];

@@ -49,9 +49,9 @@ describe('FoodField', () => {
 
 describe('World determinism (food only)', () => {
   it('same seed gives identical food after 2,000 ticks; different seed differs', () => {
-    const a = new World({ seed: 11 });
-    const b = new World({ seed: 11 });
-    const c = new World({ seed: 12 });
+    const a = new World({ seed: 11, initialPopulation: 0 });
+    const b = new World({ seed: 11, initialPopulation: 0 });
+    const c = new World({ seed: 12, initialPopulation: 0 });
     a.run(2000);
     b.run(2000);
     c.run(2000);

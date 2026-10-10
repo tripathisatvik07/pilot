@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ACT_OUTPUT, ACT_STRIDE } from '../src/sim/creatures.ts';
 import { moveCost, OUT_EAT, OUT_THRUST, World } from '../src/sim/world.ts';
-import { emptyWorld, makeGenome } from './helpers.ts';
+import { emptyWorld, makeGenome, SMALL_WORLD } from './helpers.ts';
 
 function outputs(w: World, s: number): Float32Array {
   return w.pool.act.subarray(s * ACT_STRIDE + ACT_OUTPUT, s * ACT_STRIDE + ACT_OUTPUT + 4);
@@ -109,16 +109,18 @@ describe('death and food drop', () => {
 });
 
 describe('world determinism with creatures', () => {
-  it('same seed gives byte-identical state after 5,000 ticks', () => {
-    const a = new World({ seed: 99 });
-    const b = new World({ seed: 99 });
+  // The full-default 5,000-tick check lives in saveload.test.ts; this one is a smaller, faster
+  // variant on a different seed and population.
+  it('same seed gives byte-identical state after 5,000 ticks (small world)', () => {
+    const a = new World({ ...SMALL_WORLD, seed: 99 });
+    const b = new World({ ...SMALL_WORLD, seed: 99 });
     a.run(5000);
     b.run(5000);
     expect(JSON.stringify(a.serialize())).toBe(JSON.stringify(b.serialize()));
   });
 
   it('save → load → continue equals an uninterrupted run', () => {
-    const a = new World({ seed: 5 });
+    const a = new World({ ...SMALL_WORLD, seed: 5 });
     a.run(1500);
     const b = World.deserialize(JSON.parse(JSON.stringify(a.serialize())));
     a.run(1500);

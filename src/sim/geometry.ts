@@ -28,3 +28,22 @@ export function normAngle(a: number): number {
   if (a < 0) a += TAU;
   return a - Math.PI;
 }
+
+/**
+ * Fast atan2 (max error ≈ 1e-5 rad), about 3× cheaper than Math.atan2 in V8. Used in the
+ * vision hot loop where it runs ~100 times per creature per tick. Pure arithmetic, so it is
+ * just as deterministic as Math.atan2.
+ */
+export function fastAtan2(y: number, x: number): number {
+  const ax = x < 0 ? -x : x;
+  const ay = y < 0 ? -y : y;
+  if (ax === 0 && ay === 0) return 0;
+  // Reduce to z in [0, 1] so the polynomial only needs to cover one octant.
+  const swap = ay > ax;
+  const z = swap ? ax / ay : ay / ax;
+  const z2 = z * z;
+  let a = z * (0.999866 + z2 * (-0.3302995 + z2 * (0.180141 + z2 * (-0.085133 + z2 * 0.0208351))));
+  if (swap) a = Math.PI / 2 - a;
+  if (x < 0) a = Math.PI - a;
+  return y < 0 ? -a : a;
+}

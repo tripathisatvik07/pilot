@@ -74,7 +74,7 @@
   splits into distinct herbivores and carnivores instead of mushy generalists.
 - **Carrion:** every carcass leaves `carrionFraction` as meat that rots at `carrionDecay` per tick.
   Only meat-eaters can eat it, and their eyes see it as food. Without it carnivores died out on every
-  seed during prey crashes; with it (plus richer kills) they survived on 10/10 seeds.
+  seed during prey crashes; with it (plus richer kills) they survive on 8 of 10 seeds to 50k ticks.
 - **Tweak:** `attackDamage`, `attackCooldown`, `meatTransfer`, `killFeastFraction` (how lucrative
   hunting is — too high and predators overshoot and crash), `carrionFraction`/`carrionDecay`
   (buffer strength), `plantDietExponent`/`meatDietExponent` (generalist vs. specialist),
@@ -91,3 +91,16 @@
   samples), new dominant lineage (≥ `dominantLineageShare`), extinctions.
 - **Why panels update at ~5 Hz:** DOM and chart redraws are slow compared with the world canvas;
   humans can't read faster anyway.
+
+## Milestone 7 — save/load, speed, performance, docs
+- **Save/load:** `World.serialize()` writes every piece of dynamic state (tick, PRNG state, plants,
+  carrion, free-slot list, every living creature's fields, genome and activations, stats and events)
+  as plain JSON. `World.deserialize()` rebuilds the static parts (fertility map) from the config and
+  overwrites the rest, so a loaded world continues bit-for-bit (tested).
+- **Speed:** the UI runs `speed` ticks per animation frame (1×–50×) but stops early after 14 ms so
+  the page stays responsive; the HUD shows real ticks/s, ms per tick and draw time.
+- **Performance work:** profiling showed sensing was ~80% of the tick. The neighbour loop now works
+  in the creature's own frame, skips neighbours that cannot beat any ray's current nearest one, and
+  uses a fast polynomial `atan2`. Numbers are in README/DECISIONS.
+- **Tweak:** `hashCellSize` (40 was fastest), `historyLength`/`statsInterval` (chart resolution vs.
+  memory), `maxCreatures` (hard ceiling and memory).

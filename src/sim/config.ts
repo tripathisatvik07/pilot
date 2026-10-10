@@ -257,7 +257,7 @@ export const DEFAULT_CONFIG: SimConfig = {
   bodyEnergy: 30,
   killFeastFraction: 0.8,
   corpseDropFraction: 0.5,
-  carrionFraction: 0.8,
+  carrionFraction: 1.0,
   carrionDecay: 0.001,
   carnivoreThreshold: 0.5,
 

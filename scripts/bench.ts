@@ -1,6 +1,6 @@
 // Throughput benchmark for the performance targets.
 //   1) headless: run N ticks with default config and report wall time / ticks per second
-//   2) dense:    hold ~2,000+ creatures and report ms per tick (the 60 fps browser target needs
+//   2) dense:    hold ~2,200 creatures and report ms per tick (the 60 fps browser target needs
 //                the sim tick plus drawing to fit in ~16 ms per frame at 1×)
 //
 //   node scripts/bench.ts [--ticks 100000] [--seed 1]
@@ -28,8 +28,8 @@ const seed = Number(values.seed);
 }
 
 {
-  // Dense world: lots of food so a large population is sustainable, seeded with 2,500.
-  const w = new World({ seed, initialPopulation: 2500, foodMax: 80, foodGrowthRate: 0.03 });
+  // Dense world: plenty of food, population held at ~2,200 by the pool cap (the 2,000+ target).
+  const w = new World({ seed, initialPopulation: 2200, maxCreatures: 2200, foodMax: 80, foodGrowthRate: 0.03 });
   w.run(200); // warm up the JIT
   const n = 1000;
   const t0 = performance.now();
