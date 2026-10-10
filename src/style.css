@@ -1,0 +1,178 @@
+:root {
+  --bg: #0d1114;
+  --panel: #161c21;
+  --border: #2a333b;
+  --text: #d6dde3;
+  --muted: #8a97a3;
+  --accent: #6fc28b;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+#app {
+  display: flex;
+  height: 100vh;
+}
+
+#stage {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+}
+
+#world {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  cursor: crosshair;
+}
+
+#hud {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: 4px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+#side {
+  width: 360px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  padding: 8px 12px 24px;
+}
+
+h1 {
+  font-size: 18px;
+  margin: 4px 0 8px;
+  color: var(--accent);
+}
+
+h2 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin: 14px 0 6px;
+}
+
+section {
+  border-top: 1px solid var(--border);
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: var(--text);
+  background: #222a31;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 8px;
+}
+
+button:hover {
+  border-color: var(--accent);
+  cursor: pointer;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin: 6px 0;
+}
+
+.row label {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+input[type='text'] {
+  width: 90px;
+}
+
+input[type='range'] {
+  width: 120px;
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 1px 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.kv span:nth-child(odd) {
+  color: var(--muted);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+canvas.chart,
+canvas.nn {
+  width: 100%;
+  display: block;
+  background: #0f1418;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  margin-bottom: 6px;
+}
+
+#log ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  font-size: 12px;
+}
+
+#log li {
+  padding: 2px 0;
+  border-bottom: 1px solid #1d242a;
+}
+
+#log li b {
+  color: var(--muted);
+  font-weight: normal;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 900px) {
+  #app {
+    flex-direction: column;
+    height: auto;
+  }
+  #stage {
+    height: 60vh;
+  }
+  #side {
+    width: 100%;
+  }
+}
