@@ -6,7 +6,7 @@
 |---|---|---|
 | 1 | Setup, config, PRNG, food field + seasons, heatmap | done |
 | 2 | Creatures, energy economy, random-walk brain, rendering | done |
-| 3 | Neural brains, vision rays, spatial hash | pending |
+| 3 | Neural brains, vision rays, spatial hash | done |
 | 4 | Reproduction, mutation, headless script, tuning | pending |
 | 5 | Diet, predation, combat, coexistence tuning | pending |
 | 6 | Inspector, NN diagram, charts, event log | pending |
@@ -32,3 +32,13 @@
 - Problems: `addCreature` did not clamp energy to max (test caught it; fixed). A slot-reuse test
   failed because the test creature was grazing the default food and did not starve; the test
   now empties the food field first.
+
+### Milestone 3
+- `npm test`: 39/39 passed. New: forward pass vs a hand-computed example and vs a naive matrix
+  implementation; spatial hash returns exactly the brute-force neighbour set (incl. edge wrap and
+  radii larger than half the world, no duplicates); vision rays see ahead / across the world edge /
+  not behind; food rays read the right cells; attack target selection.
+- Problem: food-ray test hit the wrong cell because trait genes are float32, so a vision range of
+  60 decodes to 59.99999 and the sample landed just across a cell border. Fixed the test to keep
+  sample points away from cell borders (the behaviour itself is fine).
+- First perf reading: ~7.7 ms/tick with ~1,300–2,000 creatures (Node 22).

@@ -2,7 +2,8 @@
 // here touches the DOM or wall-clock time, so the same code runs in the browser, in Node
 // scripts and in tests, and a given seed always produces the same history.
 
-import { type SimConfig, withDefaults } from './config.ts';
+import { forward } from './brain.ts';
+import { INPUTS_PER_RAY, type SimConfig, TRAITS, VISION_RAYS, withDefaults } from './config.ts';
 import {
   ACT_OUTPUT,
   ACT_STRIDE,
@@ -19,8 +20,12 @@ import {
   TRAIT_INDEX,
   TRAIT_OFFSET,
 } from './genome.ts';
-import { normAngle, wrap } from './geometry.ts';
+import { normAngle, TAU, wrap } from './geometry.ts';
 import { Rng } from './rng.ts';
+import { SpatialHash } from './spatial.ts';
+
+/** Largest possible body size; bounds the neighbour search for attack targets. */
+const MAX_SIZE = TRAITS[TRAIT_INDEX.size].max;
 
 export const SAVE_FORMAT_VERSION = 1;
 
@@ -54,15 +59,20 @@ export class World {
   readonly rng: Rng;
   readonly food: FoodField;
   readonly pool: CreaturePool;
+  readonly hash: SpatialHash;
   tick = 0;
   /** Next creature id to hand out (ids are never reused, unlike slots). */
   nextId = 1;
+  // Per-ray scratch for sense(); reused to avoid allocating every call.
+  private readonly nearD2 = new Float64Array(VISION_RAYS);
+  private readonly nearSlot = new Int32Array(VISION_RAYS);
 
   constructor(config: Partial<SimConfig> = {}, populate = true) {
     this.cfg = withDefaults(config);
     this.rng = new Rng(this.cfg.seed);
     this.food = new FoodField(this.cfg, this.rng);
     this.pool = new CreaturePool(this.cfg.maxCreatures);
+    this.hash = new SpatialHash(this.cfg.worldWidth, this.cfg.worldHeight, this.cfg.hashCellSize, this.cfg.maxCreatures);
     if (populate) this.spawnFounders(this.cfg.initialPopulation);
   }
 
@@ -167,20 +177,153 @@ export class World {
   }
 
   /**
-   * Placeholder brain (milestone 2): a correlated random walk that always tries to eat.
-   * Replaced by the neural network in milestone 3.
+   * Sense + think for every creature. All creatures perceive the same snapshot (positions
+   * are not touched here), so slot order gives nobody an information advantage.
    */
   private think(): void {
     const p = this.pool;
+    const hash = this.hash;
+    hash.build(p.alive, p.x, p.y);
     for (let s = 0; s < p.capacity; s++) {
       if (!p.alive[s]) continue;
-      const o = s * ACT_STRIDE + ACT_OUTPUT;
-      const turn = p.act[o + OUT_TURN] * 0.9 + this.rng.gaussian() * 0.3;
-      p.act[o + OUT_TURN] = Math.max(-1, Math.min(1, turn));
-      p.act[o + OUT_THRUST] = 0.5;
-      p.act[o + OUT_EAT] = 1;
-      p.act[o + OUT_REPRO] = -1;
+      this.sense(s);
+      forward(p.genomes, s * GENOME_LENGTH, p.act, s * ACT_STRIDE);
     }
+  }
+
+  /** Fill the brain inputs of slot s and find its attack target. */
+  sense(s: number): void {
+    const p = this.pool;
+    const cfg = this.cfg;
+    const food = this.food;
+    const hash = this.hash;
+    const W = cfg.worldWidth;
+    const H = cfg.worldHeight;
+    const act = p.act;
+    const a0 = s * ACT_STRIDE;
+    const x = p.x[s];
+    const y = p.y[s];
+    const heading = p.heading[s];
+    const range = p.visionRange[s];
+    const fov = p.fov[s];
+    const halfFov = fov * 0.5;
+    const n = VISION_RAYS;
+
+    // --- Food along each ray: nearer samples count more, so "food ahead, close" > "far".
+    const samples = cfg.raySamples;
+    const invMax = 1 / cfg.foodMax;
+    for (let k = 0; k < n; k++) {
+      const a = heading - halfFov + (fov * (k + 0.5)) / n;
+      const cx = Math.cos(a);
+      const cy = Math.sin(a);
+      let best = 0;
+      for (let j = 1; j <= samples; j++) {
+        const d = (range * j) / samples;
+        const v = food.food[food.cellIndex(x + cx * d, y + cy * d)] * invMax * (1 - (0.5 * (j - 1)) / samples);
+        if (v > best) best = v;
+      }
+      act[a0 + k * INPUTS_PER_RAY] = best > 1 ? 1 : best;
+    }
+
+    // --- Creatures: nearest one per ray sector, plus the nearest attackable one in front.
+    const nearD2 = this.nearD2;
+    const nearSlot = this.nearSlot;
+    const range2 = range * range;
+    for (let k = 0; k < n; k++) {
+      nearD2[k] = range2;
+      nearSlot[k] = -1;
+    }
+    const myRadius = p.size[s] * cfg.bodyRadius;
+    let target = -1;
+    let targetD2 = Infinity;
+    const cone = cfg.attackCone;
+    const maxReach = myRadius + 2 * cfg.bodyRadius * MAX_SIZE + cfg.attackReach;
+    const radius = range > maxReach ? range : maxReach;
+    const radius2 = radius * radius;
+
+    // Inline version of SpatialHash.forEachNear: this is the hottest loop in the program and
+    // avoiding a closure call per neighbour roughly halves its cost.
+    const cols = hash.cols;
+    const rows = hash.rows;
+    let c0 = Math.floor((x - radius) / hash.cellW);
+    let c1 = Math.floor((x + radius) / hash.cellW);
+    let r0 = Math.floor((y - radius) / hash.cellH);
+    let r1 = Math.floor((y + radius) / hash.cellH);
+    if (c1 - c0 + 1 >= cols) {
+      c0 = 0;
+      c1 = cols - 1;
+    }
+    if (r1 - r0 + 1 >= rows) {
+      r0 = 0;
+      r1 = rows - 1;
+    }
+    const start = hash.cellStart;
+    const items = hash.cellItems;
+    const halfW = W * 0.5;
+    const halfH = H * 0.5;
+    for (let r = r0; r <= r1; r++) {
+      const rr = r < 0 ? r + rows : r >= rows ? r - rows : r;
+      for (let c = c0; c <= c1; c++) {
+        const cc = c < 0 ? c + cols : c >= cols ? c - cols : c;
+        const cell = rr * cols + cc;
+        const end = start[cell + 1];
+        for (let it = start[cell]; it < end; it++) {
+          const o = items[it];
+          if (o === s) continue;
+          let dx = p.x[o] - x;
+          if (dx >= halfW) dx -= W;
+          else if (dx < -halfW) dx += W;
+          let dy = p.y[o] - y;
+          if (dy >= halfH) dy -= H;
+          else if (dy < -halfH) dy += H;
+          const d2 = dx * dx + dy * dy;
+          if (d2 >= radius2) continue; // most neighbours fail here, before the atan2
+          const rel = normAngle(Math.atan2(dy, dx) - heading);
+          // Attack target: within reach (body radii + attackReach) and inside the front cone.
+          if (rel > -cone && rel < cone && d2 < targetD2) {
+            const reach = myRadius + p.size[o] * cfg.bodyRadius + cfg.attackReach;
+            if (d2 < reach * reach) {
+              target = o;
+              targetD2 = d2;
+            }
+          }
+          if (d2 < range2) {
+            const t = rel + halfFov;
+            if (t >= 0 && t < fov) {
+              let k = Math.floor((t / fov) * n);
+              if (k >= n) k = n - 1;
+              if (d2 < nearD2[k]) {
+                nearD2[k] = d2;
+                nearSlot[k] = o;
+              }
+            }
+          }
+        }
+      }
+    }
+    p.target[s] = target;
+
+    const mySize = p.size[s];
+    for (let k = 0; k < n; k++) {
+      const base = a0 + k * INPUTS_PER_RAY;
+      const o = nearSlot[k];
+      if (o < 0) {
+        // Nothing seen: closeness 0 and relative size 0 read as "empty".
+        act[base + 1] = 0;
+        act[base + 2] = 0;
+      } else {
+        act[base + 1] = 1 - Math.sqrt(nearD2[k]) / range;
+        // (other − me)/(other + me): +ve = bigger than me (danger?), −ve = smaller (prey?).
+        act[base + 2] = (p.size[o] - mySize) / (p.size[o] + mySize);
+      }
+    }
+
+    // --- Internal state.
+    const e = a0 + VISION_RAYS * INPUTS_PER_RAY;
+    act[e] = p.energy[s] / p.maxEnergy[s];
+    act[e + 1] = p.speed[s] / p.maxSpeed[s];
+    act[e + 2] = 1; // bias
+    act[e + 3] = Math.sin((TAU * p.age[s]) / cfg.oscillatorPeriod);
   }
 
   /** Apply outputs: turn, move, pay energy, eat. */

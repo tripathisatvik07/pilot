@@ -147,6 +147,8 @@ export interface SimConfig {
   oscillatorPeriod: number;
   /** Food samples taken along each vision ray. */
   raySamples: number;
+  /** Spatial-hash cell size in units; ~1/3 of typical vision range balances cells visited vs. creatures checked. */
+  hashCellSize: number;
 
   // --- Statistics & events ---------------------------------------------------------------------
   /** Ticks between stats samples. */
@@ -266,6 +268,7 @@ export const DEFAULT_CONFIG: SimConfig = {
 
   oscillatorPeriod: 120,
   raySamples: 3,
+  hashCellSize: 40,
 
   statsInterval: 50,
   historyLength: 800,

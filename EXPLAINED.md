@@ -30,3 +30,18 @@
   is partly (`corpseDropFraction`) returned to the soil, so death fertilises the land.
 - **Tweak:** `basalCost`, `moveCostCoef` (how expensive living/moving is), `biteSize` (how fast
   food converts to energy), `energyPerSize` (reserve size), `maxAge`, `bodyEnergy`.
+
+## Milestone 3 — brains, eyes and the spatial hash
+- **Brain:** 19 inputs → 10 tanh hidden → 4 tanh outputs, read straight out of the genome
+  (no hidden-layer biases needed because one input is a constant 1). Outputs: turn (×`turnRateMax`),
+  thrust (negative = stop), eat/attack intent (> 0 = on), reproduce intent (> 0 = on).
+- **Eyes:** 5 rays spread evenly across the creature's field of view. Each ray reports the best
+  food level along it (nearer samples weigh more), plus the closest creature inside that ray's
+  wedge: closeness (1 = touching, 0 = nothing seen) and relative size `(other − me)/(other + me)`.
+  Extra inputs: own energy, own speed, bias 1, and a sine oscillator for rhythmic behaviour.
+- **Spatial hash:** a uniform grid rebuilt every tick by counting sort. Instead of comparing every
+  pair (n²), each creature only checks grid cells within its vision radius. Deterministic order.
+- **Why sense-then-act:** every creature decides from the same snapshot, so slot order gives no one
+  an advantage in perception.
+- **Tweak:** `hashCellSize` (performance only), trait ranges for `visionRange`/`fov` in `TRAITS`,
+  `raySamples`, `oscillatorPeriod`, `turnRateMax`.
