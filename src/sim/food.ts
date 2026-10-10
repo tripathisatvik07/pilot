@@ -16,6 +16,8 @@ export class FoodField {
   readonly food: Float32Array;
   /** Static 0..1 fertility per cell; scales each cell's carrying capacity. */
   readonly fertility: Float32Array;
+  /** Carrion (meat) energy per cell, left by carcasses; only meat-eaters can digest it. */
+  readonly meat: Float32Array;
   private readonly cfg: SimConfig;
 
   constructor(cfg: SimConfig, rng: Rng) {
@@ -27,6 +29,7 @@ export class FoodField {
     const n = this.cols * this.rows;
     this.food = new Float32Array(n);
     this.fertility = new Float32Array(n);
+    this.meat = new Float32Array(n);
 
     const noise = new TileableNoise(rng, cfg.fertilityNoiseScale, cfg.worldHeight / cfg.worldWidth);
     const raw = new Float64Array(n);
@@ -76,6 +79,10 @@ export class FoodField {
       else if (next > hardCap) next = hardCap;
       food[i] = next;
     }
+    // Carrion rots exponentially, so it is a short-lived bonus near recent deaths.
+    const keep = 1 - this.cfg.carrionDecay;
+    const meat = this.meat;
+    for (let i = 0; i < meat.length; i++) if (meat[i] > 0) meat[i] = meat[i] < 0.01 ? 0 : meat[i] * keep;
   }
 
   /** Index of the cell containing world point (x, y). */
@@ -105,6 +112,25 @@ export class FoodField {
   deposit(x: number, y: number, amount: number): void {
     const i = this.cellIndex(x, y);
     this.food[i] = Math.min(this.cfg.foodMax * 2, this.food[i] + amount);
+  }
+
+  /** Leave carrion in the cell under (x, y). */
+  depositMeat(x: number, y: number, amount: number): void {
+    if (amount > 0) this.meat[this.cellIndex(x, y)] += amount;
+  }
+
+  /** Remove up to `amount` carrion from a cell; returns what was taken. */
+  takeMeat(index: number, amount: number): number {
+    const have = this.meat[index];
+    const got = amount < have ? amount : have;
+    this.meat[index] = have - got;
+    return got;
+  }
+
+  totalMeat(): number {
+    let t = 0;
+    for (let i = 0; i < this.meat.length; i++) t += this.meat[i];
+    return t;
   }
 
   total(): number {

@@ -28,6 +28,8 @@ import { Stats, type StatsState } from './stats.ts';
 
 /** Largest possible body size; bounds the neighbour search for attack targets. */
 const MAX_SIZE = TRAITS[TRAIT_INDEX.size].max;
+/** Below this meat efficiency an attack is pointless, so it is not even attempted. */
+const MIN_MEAT_EFF = 0.01;
 
 export const SAVE_FORMAT_VERSION = 1;
 
@@ -52,6 +54,7 @@ export interface WorldSnapshot {
   rngState: number;
   nextId: number;
   food: number[];
+  meat: number[];
   freeList: number[];
   creatures: CreatureRecord[];
   stats: StatsState;
@@ -237,6 +240,8 @@ export class World {
     // --- Food along each ray: nearer samples count more, so "food ahead, close" > "far".
     const samples = cfg.raySamples;
     const invMax = 1 / cfg.foodMax;
+    const plantEff = p.plantEff[s];
+    const meatEff = p.meatEff[s];
     for (let k = 0; k < n; k++) {
       const a = heading - halfFov + (fov * (k + 0.5)) / n;
       const cx = Math.cos(a);
@@ -244,7 +249,11 @@ export class World {
       let best = 0;
       for (let j = 1; j <= samples; j++) {
         const d = (range * j) / samples;
-        const v = food.food[food.cellIndex(x + cx * d, y + cy * d)] * invMax * (1 - (0.5 * (j - 1)) / samples);
+        const ci = food.cellIndex(x + cx * d, y + cy * d);
+        // "Food" means food *this* creature can digest: plants weighted by plant efficiency,
+        // carrion by meat efficiency. A herbivore and a scavenger see different worlds.
+        const edible = food.food[ci] * plantEff + food.meat[ci] * meatEff;
+        const v = edible * invMax * (1 - (0.5 * (j - 1)) / samples);
         if (v > best) best = v;
       }
       act[a0 + k * INPUTS_PER_RAY] = best > 1 ? 1 : best;
@@ -386,8 +395,57 @@ export class World {
           const got = this.food.take(this.food.cellIndex(p.x[s], p.y[s]), want < room ? want : room);
           p.energy[s] += got;
         }
+        // Scavenge carrion in the same cell (only meat-eaters can digest it).
+        if (p.meatEff[s] > MIN_MEAT_EFF) {
+          const room2 = p.maxEnergy[s] - p.energy[s];
+          const wantMeat = cfg.biteSize * p.size[s] * p.metabolism[s] * p.meatEff[s];
+          if (room2 > 0) {
+            const ci = this.food.cellIndex(p.x[s], p.y[s]);
+            if (this.food.meat[ci] > 0) p.energy[s] += this.food.takeMeat(ci, wantMeat < room2 ? wantMeat : room2);
+          }
+        }
+        // The same intent also attacks whatever is in reach in front. Herbivores have ~0
+        // meat efficiency, so for them this is a harmless, free no-op.
+        const t = p.target[s];
+        if (
+          t >= 0 &&
+          p.alive[t] &&
+          p.attackTimer[s] <= 0 &&
+          p.meatEff[s] > MIN_MEAT_EFF &&
+          p.energy[s] < cfg.huntSatiation * p.maxEnergy[s]
+        ) {
+          this.attack(s, t);
+        }
       }
     }
+  }
+
+  /**
+   * One attack from `a` on victim `v`. Damage grows with the attacker's size, metabolism and
+   * meat efficiency and with the size ratio (big things bite small things hard). The
+   * attacker absorbs part of the damage; a kill also lets it feast on the carcass.
+   */
+  private attack(a: number, v: number): void {
+    const p = this.pool;
+    const cfg = this.cfg;
+    const eff = p.meatEff[a];
+    p.energy[a] -= cfg.attackCost * p.size[a] * eff;
+    p.attackTimer[a] = cfg.attackCooldown;
+    let ratio = p.size[a] / p.size[v];
+    if (ratio > 2) ratio = 2;
+    else if (ratio < 0.5) ratio = 0.5;
+    const dmg = cfg.attackDamage * p.size[a] * p.metabolism[a] * eff * ratio;
+    const dealt = dmg < p.energy[v] ? dmg : Math.max(0, p.energy[v]);
+    p.energy[v] -= dmg;
+    let gain = dealt * cfg.meatTransfer;
+    if (p.energy[v] <= 0) {
+      // Kill: the predator eats part of the body; kill() drops part of the rest as fertiliser.
+      const carcass = cfg.bodyEnergy * p.size[v];
+      gain += carcass * cfg.killFeastFraction * eff;
+      p.kills[a]++;
+      this.kill(v, true);
+    }
+    p.energy[a] = Math.min(p.maxEnergy[a], p.energy[a] + gain);
   }
 
   /**
@@ -458,8 +516,11 @@ export class World {
   kill(slot: number, byPredator = false): void {
     const p = this.pool;
     this.stats.onDeath(byPredator);
-    const carcass = this.carcassEnergy(slot);
+    // A predator already ate killFeastFraction of the body; only the rest can rot into soil.
+    const eaten = byPredator ? this.cfg.killFeastFraction : 0;
+    const carcass = this.carcassEnergy(slot) * (1 - eaten);
     this.food.deposit(p.x[slot], p.y[slot], carcass * this.cfg.corpseDropFraction);
+    this.food.depositMeat(p.x[slot], p.y[slot], carcass * this.cfg.carrionFraction);
     p.release(slot);
   }
 
@@ -506,6 +567,7 @@ export class World {
       rngState: this.rng.state,
       nextId: this.nextId,
       food: Array.from(this.food.food),
+      meat: Array.from(this.food.meat),
       freeList: p.freeList(),
       creatures,
       stats: structuredClone(this.stats.state),
@@ -523,6 +585,7 @@ export class World {
     w.rng.state = snap.rngState >>> 0;
     w.nextId = snap.nextId;
     w.food.food.set(snap.food);
+    if (snap.meat) w.food.meat.set(snap.meat);
     const p = w.pool;
     p.resetFreeList();
     for (const c of snap.creatures) {

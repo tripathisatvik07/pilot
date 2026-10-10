@@ -63,3 +63,19 @@
   the order must not depend on which free slot they land in.
 - **Tweak:** `reproCostFraction`/`reproEfficiency` (cost of a child), `minReproAge`,
   `reproCooldown`, `mutationRate`, the sigmas and `bigMutationChance` (speed of evolution vs. stability).
+
+## Milestone 5 — diet, predation and carrion
+- **What was added:** attacks, damage, kills, a carrion layer, and the coexistence tuning.
+- **Attack:** with the eat/attack intent on and the cooldown expired, a creature bites the nearest
+  creature inside a front cone (`attackCone`) within reach (body radii + `attackReach`). Damage =
+  `attackDamage × size × metabolism × diet² × clamp(sizeRatio, 0.5, 2)`. The attacker absorbs
+  `meatTransfer` of the damage dealt; a kill also lets it eat `killFeastFraction × diet²` of the body.
+- **Why diet²:** a convex trade-off makes half-and-half creatures bad at both, so the population
+  splits into distinct herbivores and carnivores instead of mushy generalists.
+- **Carrion:** every carcass leaves `carrionFraction` as meat that rots at `carrionDecay` per tick.
+  Only meat-eaters can eat it, and their eyes see it as food. Without it carnivores died out on every
+  seed during prey crashes; with it (plus richer kills) they survived on 10/10 seeds.
+- **Tweak:** `attackDamage`, `attackCooldown`, `meatTransfer`, `killFeastFraction` (how lucrative
+  hunting is — too high and predators overshoot and crash), `carrionFraction`/`carrionDecay`
+  (buffer strength), `plantDietExponent`/`meatDietExponent` (generalist vs. specialist),
+  `huntSatiation` (predators stop hunting when full; off by default).

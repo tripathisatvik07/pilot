@@ -86,7 +86,7 @@ describe('vision sensing', () => {
   it('food rays read the food field in the ray direction', () => {
     const w = emptyWorld({ ...DEFAULT_CONFIG });
     w.food.food.fill(0);
-    const me = w.addCreature(makeGenome({ visionRange: 60, fov: 2 }), 305, 305, 50, 0);
+    const me = w.addCreature(makeGenome({ visionRange: 60, fov: 2, diet: 0 }), 305, 305, 50, 0);
     // Put food ~20 units straight ahead (first sample of the middle ray). Positions avoid cell
     // borders because float32 trait genes make the decoded range 59.99999…, not exactly 60.
     w.food.food[w.food.cellIndex(325, 305)] = w.cfg.foodMax;

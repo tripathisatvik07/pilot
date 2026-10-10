@@ -101,6 +101,8 @@ export interface SimConfig {
   attackCone: number;
   /** Ticks an attacker must wait between attacks ("handling time"); higher stabilises predator–prey cycles. */
   attackCooldown: number;
+  /** Predators only attack while energy < this fraction of max (satiation); lower = gentler predators, steadier cycles. */
+  huntSatiation: number;
   /** Energy an attack costs per unit size (× meat efficiency), so attacking is never free. */
   attackCost: number;
   /** Fraction of damage dealt that the attacker absorbs as energy. */
@@ -111,6 +113,10 @@ export interface SimConfig {
   killFeastFraction: number;
   /** Fraction of a carcass that fertilises the food cell it dies in. */
   corpseDropFraction: number;
+  /** Fraction of a carcass left as carrion (meat only carnivores can eat); 0 disables scavenging. */
+  carrionFraction: number;
+  /** Fraction of carrion that rots away each tick; higher = scavenging is only worth it near fresh kills. */
+  carrionDecay: number;
   /** Diet above this counts as "carnivore" for stats, colours and events. */
   carnivoreThreshold: number;
 
@@ -245,11 +251,14 @@ export const DEFAULT_CONFIG: SimConfig = {
   attackReach: 4,
   attackCone: 0.6,
   attackCooldown: 10,
+  huntSatiation: 1,
   attackCost: 0.5,
-  meatTransfer: 0.6,
+  meatTransfer: 0.8,
   bodyEnergy: 30,
-  killFeastFraction: 0.5,
+  killFeastFraction: 0.8,
   corpseDropFraction: 0.5,
+  carrionFraction: 0.8,
+  carrionDecay: 0.001,
   carnivoreThreshold: 0.5,
 
   reproCostFraction: 0.5,
