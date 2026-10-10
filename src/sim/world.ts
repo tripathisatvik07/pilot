@@ -16,6 +16,7 @@ import {
   brainComplexity,
   decodeTrait,
   GENOME_LENGTH,
+  mutateInto,
   randomGenome,
   TRAIT_INDEX,
   TRAIT_OFFSET,
@@ -23,6 +24,7 @@ import {
 import { normAngle, TAU, wrap } from './geometry.ts';
 import { Rng } from './rng.ts';
 import { SpatialHash } from './spatial.ts';
+import { Stats, type StatsState } from './stats.ts';
 
 /** Largest possible body size; bounds the neighbour search for attack targets. */
 const MAX_SIZE = TRAITS[TRAIT_INDEX.size].max;
@@ -52,6 +54,7 @@ export interface WorldSnapshot {
   food: number[];
   freeList: number[];
   creatures: CreatureRecord[];
+  stats: StatsState;
 }
 
 export class World {
@@ -60,12 +63,14 @@ export class World {
   readonly food: FoodField;
   readonly pool: CreaturePool;
   readonly hash: SpatialHash;
+  readonly stats: Stats;
   tick = 0;
   /** Next creature id to hand out (ids are never reused, unlike slots). */
   nextId = 1;
   // Per-ray scratch for sense(); reused to avoid allocating every call.
   private readonly nearD2 = new Float64Array(VISION_RAYS);
   private readonly nearSlot = new Int32Array(VISION_RAYS);
+  private readonly parents: Int32Array;
 
   constructor(config: Partial<SimConfig> = {}, populate = true) {
     this.cfg = withDefaults(config);
@@ -73,6 +78,8 @@ export class World {
     this.food = new FoodField(this.cfg, this.rng);
     this.pool = new CreaturePool(this.cfg.maxCreatures);
     this.hash = new SpatialHash(this.cfg.worldWidth, this.cfg.worldHeight, this.cfg.hashCellSize, this.cfg.maxCreatures);
+    this.stats = new Stats(this.cfg);
+    this.parents = new Int32Array(this.cfg.maxCreatures);
     if (populate) this.spawnFounders(this.cfg.initialPopulation);
   }
 
@@ -167,8 +174,26 @@ export class World {
     this.food.update(this.tick);
     this.think();
     this.act();
+    this.reproduce();
     this.ageAndDie();
+    if (this.cfg.immigrationFloor > 0 && this.pool.count < this.cfg.immigrationFloor) {
+      const n = this.cfg.immigrationFloor - this.pool.count;
+      this.spawnFounders(n);
+      this.stats.log(this.tick, 'immigration', `${n} founders immigrated (population below floor)`);
+    }
     this.tick++;
+    if (this.tick % this.cfg.statsInterval === 0) this.recordSample();
+  }
+
+  /** Take a sample unless one was already taken at this exact tick. */
+  recordSampleIfNeeded(): void {
+    const last = this.stats.latest();
+    if (!last || last.tick !== this.tick) this.recordSample();
+  }
+
+  /** Take a stats sample now (also used by the UI right after reset/load). */
+  recordSample(): void {
+    this.stats.sample(this.tick, this.pool, this.food.total(), this.food.seasonFactor(this.tick));
   }
 
   /** Run n ticks. */
@@ -338,6 +363,8 @@ export class World {
       const turn = p.act[o + OUT_TURN];
       const thrust = p.act[o + OUT_THRUST];
       const eat = p.act[o + OUT_EAT];
+      if (p.attackTimer[s] > 0) p.attackTimer[s]--;
+      if (p.reproTimer[s] > 0) p.reproTimer[s]--;
 
       // Movement: speed eases toward the commanded speed, giving bodies some inertia.
       p.heading[s] = normAngle(p.heading[s] + turn * cfg.turnRateMax);
@@ -363,6 +390,59 @@ export class World {
     }
   }
 
+  /**
+   * Asexual reproduction. Parents are collected first and born afterwards so a newborn
+   * landing in a later slot cannot itself be considered in the same tick.
+   */
+  private reproduce(): void {
+    const p = this.pool;
+    const cfg = this.cfg;
+    const parents = this.parents;
+    let n = 0;
+    for (let s = 0; s < p.capacity; s++) {
+      if (!p.alive[s]) continue;
+      if (
+        p.act[s * ACT_STRIDE + ACT_OUTPUT + OUT_REPRO] > 0 &&
+        p.energy[s] > p.reproThreshold[s] * p.maxEnergy[s] &&
+        p.age[s] >= cfg.minReproAge &&
+        p.reproTimer[s] <= 0
+      ) {
+        parents[n++] = s;
+      }
+    }
+    for (let k = 0; k < n; k++) {
+      if (this.spawnChild(parents[k]) < 0) break; // pool full: nobody else can breed this tick
+    }
+  }
+
+  /** Create one mutated offspring of `parent`. Returns the child slot or -1 if full. */
+  spawnChild(parent: number): number {
+    const p = this.pool;
+    const cfg = this.cfg;
+    const rng = this.rng;
+    const child = p.allocate();
+    if (child < 0) return -1;
+    const big = mutateInto(rng, cfg, p.genomes, parent * GENOME_LENGTH, child * GENOME_LENGTH);
+    const angle = rng.range(-Math.PI, Math.PI);
+    const dist = rng.range(0, cfg.birthSpread);
+    this.initSlot(
+      child,
+      p.x[parent] + Math.cos(angle) * dist,
+      p.y[parent] + Math.sin(angle) * dist,
+      p.id[parent],
+      p.generation[parent] + 1,
+    );
+    // A large mutation is a big enough jump to call it a new lineage.
+    p.lineage[child] = big ? p.id[child] : p.lineage[parent];
+    const paid = p.energy[parent] * cfg.reproCostFraction;
+    p.energy[parent] -= paid;
+    p.energy[child] = Math.min(paid * cfg.reproEfficiency, p.maxEnergy[child]);
+    p.reproTimer[parent] = cfg.reproCooldown;
+    p.children[parent]++;
+    this.stats.onBirth(this.tick, p.diet[child], p.generation[child], p.id[child]);
+    return child;
+  }
+
   /** Age everyone; remove the starved and the old, returning part of their body to the soil. */
   private ageAndDie(): void {
     const p = this.pool;
@@ -375,8 +455,9 @@ export class World {
   }
 
   /** Remove a creature and drop part of its carcass into the food field. */
-  kill(slot: number): void {
+  kill(slot: number, byPredator = false): void {
     const p = this.pool;
+    this.stats.onDeath(byPredator);
     const carcass = this.carcassEnergy(slot);
     this.food.deposit(p.x[slot], p.y[slot], carcass * this.cfg.corpseDropFraction);
     p.release(slot);
@@ -427,6 +508,7 @@ export class World {
       food: Array.from(this.food.food),
       freeList: p.freeList(),
       creatures,
+      stats: structuredClone(this.stats.state),
     };
   }
 
@@ -454,6 +536,7 @@ export class World {
       w.deriveTraits(s);
     }
     p.restoreFreeList(snap.freeList);
+    w.stats.state = structuredClone(snap.stats);
     return w;
   }
 }

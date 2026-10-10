@@ -45,3 +45,21 @@
   an advantage in perception.
 - **Tweak:** `hashCellSize` (performance only), trait ranges for `visionRange`/`fov` in `TRAITS`,
   `raySamples`, `oscillatorPeriod`, `turnRateMax`.
+
+## Milestone 4 — reproduction, mutation, evolution starts
+- **What was added:** asexual reproduction, mutation, population statistics and events, and the
+  `headless`/`tune` scripts.
+- **Reproduction:** when energy > `reproThreshold × maxEnergy`, the reproduce output is positive,
+  the creature is at least `minReproAge` old and its `reproCooldown` has passed, it pays
+  `reproCostFraction` of its energy; the child receives that × `reproEfficiency` (the rest is lost,
+  so breeding is never free). Children appear within `birthSpread` of the parent.
+- **Mutation:** each gene mutates with probability `mutationRate` (weights by a Gaussian of
+  `weightMutationSigma`, trait genes by `traitMutationSigma`, both clamped). With
+  `bigMutationChance` a few genes jump `bigMutationScale`× further; such a child founds a new
+  **lineage**, which is what the "new dominant lineage" event tracks.
+- **No fitness function:** nothing scores creatures. Whoever gathers energy faster than they burn
+  it breeds more; that is the only selection.
+- **Why parents first, births after:** newborns must not act or breed in their birth tick, and
+  the order must not depend on which free slot they land in.
+- **Tweak:** `reproCostFraction`/`reproEfficiency` (cost of a child), `minReproAge`,
+  `reproCooldown`, `mutationRate`, the sigmas and `bigMutationChance` (speed of evolution vs. stability).
